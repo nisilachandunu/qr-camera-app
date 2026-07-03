@@ -93,13 +93,53 @@ npm run build
 
 ## Production Deployment
 
-### Frontend (Vercel / Netlify / Cloudflare Pages)
+### Frontend on Vercel
 
-1. Build command: `npm run build -w frontend`
-2. Output directory: `frontend/dist`
-3. Environment variable: `VITE_API_URL=https://api.yourdomain.com`
+The repo includes a root [`vercel.json`](vercel.json) configured for this monorepo. **Only the frontend** deploys to Vercel — the backend must be hosted separately (see below).
+
+#### Option A — Vercel Dashboard (recommended)
+
+1. Push the repo to GitHub.
+2. Go to [vercel.com/new](https://vercel.com/new) and import the repository.
+3. Vercel should auto-detect settings from `vercel.json`:
+   - **Install Command:** `npm install`
+   - **Build Command:** `npm run build -w frontend`
+   - **Output Directory:** `frontend/dist`
+4. Add an environment variable:
+
+   | Name | Value |
+   |------|-------|
+   | `VITE_API_URL` | Your backend URL, e.g. `https://your-app.up.railway.app` |
+
+5. Deploy. Your app will be at `https://your-project.vercel.app`.
+
+6. After you have a custom domain (optional), update the backend `FRONTEND_URL` to match.
+
+#### Option B — Vercel CLI
+
+```bash
+npm i -g vercel
+cd "D:\Projects\QR App"
+vercel login
+vercel
+
+# Set production env var (replace with your backend URL)
+vercel env add VITE_API_URL production
+
+# Deploy to production
+vercel --prod
+```
+
+#### Important notes
+
+- `VITE_API_URL` must point to your **public backend** — there is no API proxy on Vercel in production.
+- Camera access requires HTTPS — Vercel provides this automatically.
+- Point your wedding QR code at the Vercel URL (e.g. `https://guestbook.vercel.app`).
+- Redeploy after changing `VITE_API_URL` (it is baked in at build time).
 
 ### Backend (Railway / Render / Fly.io / VPS)
+
+> **Cannot run on Vercel** — needs a persistent server for Socket.IO, file uploads, and the print queue.
 
 1. Build command: `npm run build -w backend`
 2. Start command: `npm run start -w backend`
@@ -108,12 +148,14 @@ npm run build
 
 ```env
 PORT=3001
-FRONTEND_URL=https://guestbook.yourdomain.com
+FRONTEND_URL=https://your-project.vercel.app
 PRINTER_CLIENT_TOKEN=<strong-random-secret>
 BASE_URL=https://api.yourdomain.com
 UPLOAD_DIR=./uploads
 MAX_FILE_SIZE=5242880
 ```
+
+Set `FRONTEND_URL` to your exact Vercel URL (including `https://`) so CORS allows guest uploads.
 
 ### Printer Client (Windows laptop at venue)
 
