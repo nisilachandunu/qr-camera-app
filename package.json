@@ -1,0 +1,21 @@
+{
+  "name": "wedding-polaroid-guestbook",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend",
+    "printer-client"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w backend\" \"npm run dev -w frontend\" \"npm run dev -w printer-client\"",
+    "dev:frontend": "npm run dev -w frontend",
+    "dev:backend": "npm run dev -w backend",
+    "dev:printer": "npm run dev -w printer-client",
+    "build": "npm run build -w backend && npm run build -w frontend && npm run build -w printer-client",
+    "lint": "npm run lint -w frontend && npm run lint -w backend && npm run lint -w printer-client"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
