@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: qr-camera-backend
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build -w backend
+    startCommand: npm run start -w backend
+    healthCheckPath: /api/health
+    envVars:
+      - key: FRONTEND_URL
+        sync: false # set to your Vercel URL after the frontend is deployed
+      - key: PRINTER_CLIENT_TOKEN
+        generateValue: true
+      - key: UPLOAD_DIR
+        value: ./uploads
+      - key: MAX_FILE_SIZE
+        value: "5242880"
