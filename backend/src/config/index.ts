@@ -15,6 +15,8 @@ export const config = {
   dataDir: path.resolve(rootDir, './data'),
   jobsFile: path.resolve(rootDir, './data/jobs.json'),
   maxFileSize: parseInt(process.env.MAX_FILE_SIZE ?? '5242880', 10),
-  baseUrl: process.env.BASE_URL ?? process.env.RENDER_EXTERNAL_URL ?? 'http://localhost:3001',
+  baseUrl:
+    process.env.BASE_URL ??
+    (process.env.WEBSITE_HOSTNAME ? `https://${process.env.WEBSITE_HOSTNAME}` : 'http://localhost:3001'),
   heartbeatTimeoutMs: 60_000,
 };

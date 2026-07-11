@@ -91,71 +91,55 @@ npm run dev:printer
 npm run build
 ```
 
-## Production Deployment
+## Production Deployment (Azure Web Apps)
 
-### Frontend on Vercel
+Both frontend and backend deploy as separate **Azure App Service (Linux, Node 20)** Web Apps, kept in sync via GitHub Actions (`.github/workflows/azure-backend.yml` and `azure-frontend.yml`). Each workflow builds the package on GitHub's runners and zip-deploys a self-contained bundle (build output + production `node_modules` only), so Azure doesn't need to run an Oryx build for this monorepo.
 
-The repo includes a root [`vercel.json`](vercel.json) configured for this monorepo. **Only the frontend** deploys to Vercel — the backend must be hosted separately (see below).
+### 1. Create the two Web Apps in the Azure Portal
 
-#### Option A — Vercel Dashboard (recommended)
+For each app (e.g. `qr-camera-backend` and `qr-camera-frontend`):
 
-1. Push the repo to GitHub.
-2. Go to [vercel.com/new](https://vercel.com/new) and import the repository.
-3. Vercel should auto-detect settings from `vercel.json`:
-   - **Install Command:** `npm install`
-   - **Build Command:** `npm run build -w frontend`
-   - **Output Directory:** `frontend/dist`
-4. Add an environment variable:
+1. **Create a resource → Web App**
+2. **Publish:** Code · **Runtime stack:** Node 20 LTS · **OS:** Linux
+3. Pick a region and an App Service Plan (Basic B1 or higher — the free F1 tier sleeps and has no persistent storage, which breaks Socket.IO connections and the print queue on the backend).
+4. After creation, go to **Configuration → General settings** and set the **Startup Command**:
+   - Backend: `node dist/server.js`
+   - Frontend: `npm run start`
+5. Go to **Configuration → Application settings** and add `SCM_DO_BUILD_DURING_DEPLOYMENT = false` on both (the GitHub Action already ships built artifacts, so Azure shouldn't rebuild).
+6. Under **Configuration → General settings**, turn **Web sockets** to **On** for the backend app (required for Socket.IO).
 
-   | Name | Value |
-   |------|-------|
-   | `VITE_API_URL` | Your backend URL, e.g. `https://your-app.up.railway.app` |
+### 2. Wire up GitHub Actions
 
-5. Deploy. Your app will be at `https://your-project.vercel.app`.
+1. On each Web App, go to **Overview → Get publish profile** and download the `.PublishSettings` file.
+2. In the GitHub repo, go to **Settings → Secrets and variables → Actions** and add:
+   - Secret `AZURE_BACKEND_PUBLISH_PROFILE` — contents of the backend's publish profile
+   - Secret `AZURE_FRONTEND_PUBLISH_PROFILE` — contents of the frontend's publish profile
+   - Variable `VITE_API_URL` — the backend's URL, e.g. `https://qr-camera-backend.azurewebsites.net` (baked into the frontend bundle at build time)
+3. Push to `main` (or run the workflows manually from the **Actions** tab) — each workflow only triggers when its package's files change.
 
-6. After you have a custom domain (optional), update the backend `FRONTEND_URL` to match.
+If you named your Web Apps something other than `qr-camera-backend` / `qr-camera-frontend`, update the `AZURE_WEBAPP_NAME` value at the top of both workflow files to match.
 
-#### Option B — Vercel CLI
+### 3. Backend Application Settings
 
-```bash
-npm i -g vercel
-cd "D:\Projects\QR App"
-vercel login
-vercel
-
-# Set production env var (replace with your backend URL)
-vercel env add VITE_API_URL production
-
-# Deploy to production
-vercel --prod
-```
-
-#### Important notes
-
-- `VITE_API_URL` must point to your **public backend** — there is no API proxy on Vercel in production.
-- Camera access requires HTTPS — Vercel provides this automatically.
-- Point your wedding QR code at the Vercel URL (e.g. `https://guestbook.vercel.app`).
-- Redeploy after changing `VITE_API_URL` (it is baked in at build time).
-
-### Backend (Railway / Render / Fly.io / VPS)
-
-> **Cannot run on Vercel** — needs a persistent server for Socket.IO, file uploads, and the print queue.
-
-1. Build command: `npm run build -w backend`
-2. Start command: `npm run start -w backend`
-3. Mount persistent volumes for `uploads/` and `data/`
-4. Environment variables:
+On the backend Web App, set these under **Configuration → Application settings**:
 
 ```env
-PORT=3001
-FRONTEND_URL=https://your-project.vercel.app
+FRONTEND_URL=https://qr-camera-frontend.azurewebsites.net
 PRINTER_CLIENT_TOKEN=<strong-random-secret>
-BASE_URL=https://api.yourdomain.com
 UPLOAD_DIR=./uploads
 MAX_FILE_SIZE=5242880
 ```
 
-Set `FRONTEND_URL` to your exact Vercel URL (including `https://`) so CORS allows guest uploads.
+`PORT` and `BASE_URL` don't need to be set — Azure injects `PORT`/`WEBSITES_PORT` automatically, and the backend falls back to `https://<WEBSITE_HOSTNAME>` for `BASE_URL` when unset. Set `FRONTEND_URL` to your exact frontend Web App URL so CORS allows guest uploads.
+
+> **Persistent storage:** Azure App Service Linux persists `/home` (which includes the deployed app folder) across restarts, but **not** across new deployments — each deploy replaces `uploads/` and `data/`. For a one-day event this is usually fine; for anything longer-lived, mount an Azure Storage file share under **Configuration → Path mappings** and point `UPLOAD_DIR` at it.
+
+### Important notes
+
+- `VITE_API_URL` must point at the **public backend** Web App — there is no API proxy in production.
+- Camera access requires HTTPS — Azure Web Apps provide this by default on `*.azurewebsites.net`.
+- Point your wedding QR code at the frontend Web App URL (or a custom domain mapped to it).
+- Redeploy the frontend after changing `VITE_API_URL` (it's baked in at build time).
 
 ### Printer Client (Windows laptop at venue)
 

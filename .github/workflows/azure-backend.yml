@@ -1,0 +1,49 @@
+name: Deploy backend to Azure Web App
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/azure-backend.yml'
+  workflow_dispatch:
+
+env:
+  AZURE_WEBAPP_NAME: qr-camera-backend
+  NODE_VERSION: '20'
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install workspace deps and build backend
+        run: |
+          npm ci
+          npm run build -w backend
+
+      - name: Install production-only deps for the deployed package
+        working-directory: backend
+        run: npm install --omit=dev --no-audit --no-fund
+
+      - name: Zip deployment package
+        run: |
+          cd backend
+          zip -r ../backend-release.zip dist node_modules package.json -x '*.map'
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_BACKEND_PUBLISH_PROFILE }}
+          package: backend-release.zip

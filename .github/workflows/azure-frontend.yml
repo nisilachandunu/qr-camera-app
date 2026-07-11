@@ -1,0 +1,67 @@
+name: Deploy frontend to Azure Web App
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/azure-frontend.yml'
+  workflow_dispatch:
+
+env:
+  AZURE_WEBAPP_NAME: qr-camera-frontend
+  NODE_VERSION: '20'
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install workspace deps and build frontend
+        # VITE_API_URL is baked into the bundle at build time - set it as a
+        # repository variable (Settings -> Secrets and variables -> Actions -> Variables)
+        # pointing at the backend Web App's URL, e.g. https://qr-camera-backend.azurewebsites.net
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+        run: |
+          npm ci
+          npm run build -w frontend
+
+      - name: Assemble a minimal deployment package
+        run: |
+          mkdir -p deploy
+          cp -r frontend/dist deploy/dist
+          cat > deploy/package.json <<'EOF'
+          {
+            "name": "qr-camera-frontend",
+            "private": true,
+            "version": "1.0.0",
+            "scripts": {
+              "start": "serve -s dist -l ${PORT:-8080}"
+            },
+            "dependencies": {
+              "serve": "^14.2.4"
+            }
+          }
+          EOF
+          cd deploy && npm install --omit=dev --no-audit --no-fund
+
+      - name: Zip deployment package
+        run: cd deploy && zip -r ../frontend-release.zip .
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_FRONTEND_PUBLISH_PROFILE }}
+          package: frontend-release.zip
